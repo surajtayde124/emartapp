@@ -2,13 +2,6 @@ pipeline {
     agent any
 
     stages {
-        
-        stage('Debug') {
-            steps {
-                echo "KUBECONFIG path: ${KUBECONFIG}"
-                echo "MINIKUBE_HOME path: ${MINIKUBE_HOME}"
-            }
-        }
         stage('Checkout') {
             steps {
                 // Checkout your project from the source control
