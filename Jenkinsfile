@@ -6,7 +6,7 @@ pipeline {
             steps {
                 script {
                     // Checkout the code from the current branch
-                    checkout scm
+                    git: "https://github.com/surajtayde124/emartapp.git"
                 }
             }
         }
