@@ -1,12 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        DOCKER_IMAGE = 'docker-compose'
-        KUBECONFIG = 'C:\Users\Suraj\.kube\\config'
-        MINIKUBE_HOME = 'C:\Users\Suraj\.minikube'
-    }
-
     stages {
         
         stage('Debug') {
