@@ -1,126 +1,70 @@
 pipeline {
     agent any
-	
-	environment {
-        clientRegistry = "repository.k8sengineers.com/apexrepo/client"
-        booksRegistry = "repository.k8sengineers.com/apexrepo/books"
-        mainRegistry = "repository.k8sengineers.com/apexrepo/main"
-        registryCredential = 'NexusRepoLogin'
-        cartRegistry = "https://repository.k8sengineers.com"
+
+    environment {
+        DOCKER_IMAGE = 'docker-compose'
+        KUBECONFIG = 'C:\Users\Suraj\.kube\\config'
+        MINIKUBE_HOME = 'C:\Users\Suraj\.minikube'
     }
-	
-	stages {
-	
-	  stage('Build Angular Image') {
-        when { changeset "client/*"}
-	     steps {
-		   
-		     script {
-                dockerImage = docker.build( clientRegistry + ":$BUILD_NUMBER", "./client/")
-             }
 
-		 }
-	  
-	  }
-	  
-	  stage('Deploy Angular Image') {
-          when { changeset "client/*"}
-          steps{
-            script {
-              docker.withRegistry( cartRegistry, registryCredential ) {
-                dockerImage.push("$BUILD_NUMBER")
-                dockerImage.push('latest')
-              }
-            }
-          }
-	   }
-
-       stage('Kubernetes Deploy Angular') {
-           when { changeset "client/*"}
+    stages {
+        
+        stage('Debug') {
             steps {
-                  withCredentials([file(credentialsId: 'CartWheelKubeConfig1', variable: 'config')]){
-                    sh """
-                      export KUBECONFIG=\${config}
-                      pwd
-                      helm upgrade kubekart kkartchart --install --set "kkartcharts-frontend.image.client.tag=${BUILD_NUMBER}" --namespace kart
-                      """
-                  }
-                 }  
+                echo "KUBECONFIG path: ${KUBECONFIG}"
+                echo "MINIKUBE_HOME path: ${MINIKUBE_HOME}"
+            }
+        }
+        stage('Checkout') {
+            steps {
+                // Checkout your project from the source control
+               checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs: [[url: 'https://github.com/surajtayde124/emartapp.git']]])
+            }
         }
 
-        stage('Build books Image') {
-        when { changeset "javaapi/*"}
-	     steps {
-		   
-		     script {
-                dockerImage = docker.build( booksRegistry + ":$BUILD_NUMBER", "./javaapi/")
-             }
-
-		 }
-	  
-	  }
-	  
-	  stage('Deploy books Image') {
-          when { changeset "javaapi/*"}
-          steps{
-            script {
-              docker.withRegistry( cartRegistry, registryCredential ) {
-                dockerImage.push("$BUILD_NUMBER")
-                dockerImage.push('latest')
-              }
-            }
-          }
-	   }
-
-       stage('Kubernetes books Deploy') {
-           when { changeset "javaapi/*"}
+        stage('Build Docker Image') {
             steps {
-                  withCredentials([file(credentialsId: 'CartWheelKubeConfig1', variable: 'config')]){
-                    sh """
-                      export KUBECONFIG=\${config}
-                      pwd
-                      helm upgrade kubekart kkartchart --install --set "kkartcharts-backend.image.books.tag=${BUILD_NUMBER}" --namespace kart
-                      """
-                  }
-                 }  
+                // Build your Docker image
+                script {
+                    docker.build("${DOCKER_IMAGE}")
+                }
+            }
         }
 
-        stage('Build Main Image') {
-        when { changeset "nodeapi/*"}
-	     steps {
-		   
-		     script {
-                sh " sed -i 's/localhost/emongo/g' nodeapi/config/keys.js"
-                dockerImage = docker.build( mainRegistry + ":$BUILD_NUMBER", "./nodeapi/")
-             }
-
-		 }
-	  
-	  }
-	  
-	  stage('Deploy Main Image') {
-          when { changeset "nodeapi/*"}
-          steps{
-            script {
-              docker.withRegistry( cartRegistry, registryCredential ) {
-                dockerImage.push("$BUILD_NUMBER")
-                dockerImage.push('latest')
-              }
-            }
-          }
-	   }
-
-       stage('Kubernetes Main Deploy') {
-           when { changeset "nodeapi/*"}
+        stage('Push Docker Image') {
             steps {
-                  withCredentials([file(credentialsId: 'CartWheelKubeConfig1', variable: 'config')]){
-                    sh """
-                      export KUBECONFIG=\${config}
-                      pwd
-                      helm upgrade kubekart kkartchart --install --set "kkartcharts-backend.image.main.tag=${BUILD_NUMBER}" --namespace kart
-                      """
-                  }
-                 }  
+                // Push the Docker image to your registry
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'docker-hub-credentials') {
+                        docker.image("${DOCKER_IMAGE}").push()
+                    }
+                }
+            }
         }
-	}
+
+        stage('Deploy to Minikube') {
+            steps {
+                // Set the Docker environment to use Minikube's Docker daemon
+                script {
+                    withEnv(["DOCKER_HOST=tcp://192.168.99.100:2376", "DOCKER_CERT_PATH=${MINIKUBE_HOME}/.minikube/certs", "DOCKER_TLS_VERIFY=1"]) {
+                        // Run your container in Minikube
+                        bat "kubectl --kubeconfig=${KUBECONFIG} apply -f kubeconfig.yaml"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Reaching at the end of pipeline...'
+            // Add any post-build clean-up steps here
+        }
+        success {
+            echo 'Build, test, and deployment completed successfully.'
+        }
+        failure {
+            echo 'The build, test, or deployment failed.'
+        }
+    }
 }
